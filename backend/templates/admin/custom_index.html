@@ -1,0 +1,146 @@
+<!-- backend/templates/admin/custom_index.html -->
+{% extends "admin/index.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .dashboard-widget {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .dashboard-widget h3 {
+        margin-top: 0;
+        color: #495057;
+    }
+    .quick-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    .stat-box {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 15px;
+        text-align: center;
+    }
+    .stat-number {
+        font-size: 24px;
+        font-weight: bold;
+        color: #007bff;
+        display: block;
+    }
+    .stat-label {
+        font-size: 12px;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+    .dashboard-actions {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    .dashboard-action {
+        background: #007bff;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 4px;
+        text-decoration: none;
+        font-size: 14px;
+        border: none;
+        cursor: pointer;
+    }
+    .dashboard-action:hover {
+        background: #0056b3;
+        color: white;
+    }
+    .dashboard-action.danger {
+        background: #dc3545;
+    }
+    .dashboard-action.danger:hover {
+        background: #c82333;
+    }
+    .dashboard-action.success {
+        background: #28a745;
+    }
+    .dashboard-action.success:hover {
+        background: #218838;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    
+    <!-- Dashboard Header -->
+    <div class="dashboard-widget">
+        <h2>🏠 Real Estate Bot Admin Panel</h2>
+        <p>Welcome to the administration panel for the Real Estate Bot. Here you can manage users, properties, and monitor system activity.</p>
+        
+        <!-- Quick Actions -->
+        <div class="dashboard-actions">
+            <a href="{% url 'admin:real_estate_property_changelist' %}?is_approved__exact=0" class="dashboard-action danger">
+                ⏳ Pending Approvals ({{ pending_count|default:0 }})
+            </a>
+            <a href="{% url 'admin:real_estate_telegramuser_changelist' %}" class="dashboard-action">
+                👥 Manage Users
+            </a>
+            <a href="{% url 'admin:real_estate_property_changelist' %}" class="dashboard-action">
+                🏠 Manage Properties
+            </a>
+            <a href="{% url 'admin:real_estate_useractivity_changelist' %}" class="dashboard-action">
+                📊 View Activity
+            </a>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="quick-stats">
+        <div class="stat-box">
+            <span class="stat-number">{{ total_users|default:0 }}</span>
+            <div class="stat-label">Total Users</div>
+        </div>
+        <div class="stat-box">
+            <span class="stat-number">{{ total_properties|default:0 }}</span>
+            <div class="stat-label">Total Properties</div>
+        </div>
+        <div class="stat-box">
+            <span class="stat-number">{{ active_properties|default:0 }}</span>
+            <div class="stat-label">Active Properties</div>
+        </div>
+        <div class="stat-box">
+            <span class="stat-number">{{ premium_properties|default:0 }}</span>
+            <div class="stat-label">Premium Properties</div>
+        </div>
+    </div>
+
+    <!-- Original Django Admin Content -->
+    {{ block.super }}
+</div>
+
+<script>
+// Add some JavaScript for enhanced functionality
+document.addEventListener('DOMContentLoaded', function() {
+    // Add click tracking for dashboard actions
+    const dashboardActions = document.querySelectorAll('.dashboard-action');
+    dashboardActions.forEach(action => {
+        action.addEventListener('click', function(e) {
+            // You can add analytics tracking here
+            console.log('Dashboard action clicked:', this.textContent);
+        });
+    });
+    
+    // Auto-refresh pending count every 30 seconds
+    setInterval(function() {
+        // You can implement an AJAX call to update pending count
+        // This is just a placeholder
+    }, 30000);
+});
+</script>
+{% endblock %}

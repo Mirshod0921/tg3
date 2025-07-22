@@ -1,0 +1,269 @@
+<!-- backend/templates/admin/dashboard.html -->
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Dashboard - Real Estate Bot Admin{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .dashboard-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    .stat-card {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        min-width: 200px;
+        flex: 1;
+    }
+    .stat-card h3 {
+        margin: 0 0 10px 0;
+        color: #495057;
+        font-size: 14px;
+        text-transform: uppercase;
+    }
+    .stat-number {
+        font-size: 32px;
+        font-weight: bold;
+        color: #007bff;
+        margin-bottom: 5px;
+    }
+    .stat-label {
+        color: #6c757d;
+        font-size: 12px;
+    }
+    .dashboard-section {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        padding: 20px;
+    }
+    .dashboard-section h2 {
+        margin-top: 0;
+        color: #495057;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 10px;
+    }
+    .recent-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid #f1f3f4;
+    }
+    .recent-item:last-child {
+        border-bottom: none;
+    }
+    .item-info {
+        flex: 1;
+    }
+    .item-title {
+        font-weight: 500;
+        color: #333;
+    }
+    .item-meta {
+        font-size: 12px;
+        color: #6c757d;
+    }
+    .item-badge {
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 500;
+    }
+    .badge-active { background: #d4edda; color: #155724; }
+    .badge-inactive { background: #f8d7da; color: #721c24; }
+    .badge-premium { background: #fff3cd; color: #856404; }
+    .badge-pending { background: #fce4ec; color: #e91e63; }
+    .quick-actions {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    .quick-action {
+        background: #007bff;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 4px;
+        text-decoration: none;
+        font-size: 14px;
+    }
+    .quick-action:hover {
+        background: #0056b3;
+        color: white;
+    }
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+    @media (max-width: 768px) {
+        .dashboard-grid {
+            grid-template-columns: 1fr;
+        }
+        .dashboard-stats {
+            flex-direction: column;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <h1>Real Estate Bot Dashboard</h1>
+    
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+        <a href="{% url 'admin:real_estate_telegramuser_changelist' %}" class="quick-action">
+            👥 Manage Users
+        </a>
+        <a href="{% url 'admin:real_estate_property_changelist' %}" class="quick-action">
+            🏠 Manage Properties
+        </a>
+        <a href="{% url 'admin:real_estate_property_changelist' %}?is_approved__exact=0" class="quick-action">
+            ⏳ Pending Approvals
+        </a>
+        <a href="{% url 'admin:real_estate_useractivity_changelist' %}" class="quick-action">
+            📊 View Activity
+        </a>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="dashboard-stats">
+        <div class="stat-card">
+            <h3>Total Users</h3>
+            <div class="stat-number">{{ total_users }}</div>
+            <div class="stat-label">{{ active_users }} active</div>
+        </div>
+        <div class="stat-card">
+            <h3>Total Properties</h3>
+            <div class="stat-number">{{ total_properties }}</div>
+            <div class="stat-label">{{ active_properties }} active</div>
+        </div>
+        <div class="stat-card">
+            <h3>Premium Properties</h3>
+            <div class="stat-number">{{ premium_properties }}</div>
+            <div class="stat-label">Premium listings</div>
+        </div>
+        <div class="stat-card">
+            <h3>Pending Approval</h3>
+            <div class="stat-number">{{ total_properties|add:"-"|add:active_properties }}</div>
+            <div class="stat-label">Need review</div>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <!-- Recent Users -->
+        <div class="dashboard-section">
+            <h2>Recent Users</h2>
+            {% for user in recent_users %}
+            <div class="recent-item">
+                <div class="item-info">
+                    <div class="item-title">
+                        <a href="{% url 'admin:real_estate_telegramuser_change' user.pk %}">
+                            {{ user.first_name|default:user.username|default:"No Name" }}
+                        </a>
+                    </div>
+                    <div class="item-meta">
+                        @{{ user.username|default:"no_username" }} • 
+                        {{ user.created_at|date:"M d, Y" }}
+                    </div>
+                </div>
+                <div>
+                    {% if user.is_blocked %}
+                        <span class="item-badge badge-inactive">Blocked</span>
+                    {% else %}
+                        <span class="item-badge badge-active">Active</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <p>No users yet.</p>
+            {% endfor %}
+        </div>
+
+        <!-- Recent Properties -->
+        <div class="dashboard-section">
+            <h2>Recent Properties</h2>
+            {% for property in recent_properties %}
+            <div class="recent-item">
+                <div class="item-info">
+                    <div class="item-title">
+                        <a href="{% url 'admin:real_estate_property_change' property.pk %}">
+                            {{ property.title|truncatechars:40 }}
+                        </a>
+                    </div>
+                    <div class="item-meta">
+                        {{ property.user.first_name|default:property.user.username }} • 
+                        {{ property.created_at|date:"M d, Y" }}
+                    </div>
+                </div>
+                <div>
+                    {% if not property.is_approved %}
+                        <span class="item-badge badge-pending">Pending</span>
+                    {% elif not property.is_active %}
+                        <span class="item-badge badge-inactive">Inactive</span>
+                    {% elif property.is_premium %}
+                        <span class="item-badge badge-premium">Premium</span>
+                    {% else %}
+                        <span class="item-badge badge-active">Active</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <p>No properties yet.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Popular Properties -->
+    <div class="dashboard-section">
+        <h2>Popular Properties (Most Favorited)</h2>
+        {% for property in popular_properties %}
+        <div class="recent-item">
+            <div class="item-info">
+                <div class="item-title">
+                    <a href="{% url 'admin:real_estate_property_change' property.pk %}">
+                        {{ property.title|truncatechars:50 }}
+                    </a>
+                </div>
+                <div class="item-meta">
+                    {{ property.price|floatformat:0 }} UZS • 
+                    {{ property.user.first_name|default:property.user.username }} • 
+                    {{ property.created_at|date:"M d, Y" }}
+                </div>
+            </div>
+            <div>
+                <span class="item-badge badge-active">❤️ {{ property.favorite_count }}</span>
+            </div>
+        </div>
+        {% empty %}
+        <p>No properties yet.</p>
+        {% endfor %}
+    </div>
+
+    <!-- System Information -->
+    <div class="dashboard-section">
+        <h2>System Information</h2>
+        <div class="dashboard-grid">
+            <div>
+                <h4>Bot Status</h4>
+                <p>✅ Online and Running</p>
+                <p>🔄 Last Update: {{ "now"|date:"M d, Y H:i" }}</p>
+            </div>
+            <div>
+                <h4>Database Health</h4>
+                <p>💾 {{ total_users }} users stored</p>
+                <p>🏠 {{ total_properties }} properties stored</p>
+                <p>📊 System running normally</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
