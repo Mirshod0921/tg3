@@ -923,7 +923,7 @@ TRANSLATIONS = {
         'listing_approved': "✅ E'loningiz tasdiqlandi!\n\n🎉 E'loningiz kanalga joylandi va boshqa foydalanuvchilar ko'rishi mumkin.",
         'listing_declined': "❌ E'loningiz rad etildi\n\n📝 Sabab: {feedback}\n\nIltimos, kamchiklarni bartaraf etib, qaytadan yuboring.",
 
-        'my_postings': "📝 Mening e'lonlarim",
+        'my_postings': "👀 Mening e'lonlarim",
         'no_my_postings': "😔 Sizda hozircha e'lonlar yo'q\n\n📝 E'lon joylash uchun tegishli tugmani bosing",
         'posting_status_active': "🟢 Faol",
         'posting_status_inactive': "🔴 Nofaol",
@@ -942,6 +942,10 @@ TRANSLATIONS = {
         'yes_delete': "✅ Ha, o'chirish",
         'cancel_action': "❌ Bekor qilish",
         'posting_stats': "📊 Statistika: {favorites} ta sevimli",
+
+        'posting_deleted_success': "✅ E'lon muvaffaqiyatli o'chirildi!",
+        'posting_delete_error': "❌ E'lonni o'chirishda xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.",
+        'favorite_listing_deleted': "💔 Sevimlilar ro'yxatidan 1 e'lon o'chirildi",
 
 
 
@@ -1029,7 +1033,7 @@ TRANSLATIONS = {
         'listing_approved': "✅ Ваше объявление одобрено!\n\n🎉 Объявление размещено в канале и доступно другим пользователям.",
         'listing_declined': "❌ Ваше объявление отклонено\n\n📝 Причина: {feedback}\n\nПожалуйста, устраните недочеты и отправьте повторно.",
 
-        'my_postings': "📝 Мои объявления",
+        'my_postings': "👀 Мои объявления",
         'no_my_postings': "😔 У вас пока нет объявлений\n\n📝 Нажмите соответствующую кнопку для размещения",
         'posting_status_active': "🟢 Активно",
         'posting_status_inactive': "🔴 Неактивно",
@@ -1048,6 +1052,11 @@ TRANSLATIONS = {
         'yes_delete': "✅ Да, удалить",
         'cancel_action': "❌ Отмена",
         'posting_stats': "📊 Статистика: {favorites} в избранном",
+
+
+        'posting_deleted_success': "✅ Объявление успешно удалено!",
+        'posting_delete_error': "❌ Произошла ошибка при удалении объявления.",
+        'favorite_listing_deleted': "💔 1 Удалено из избранного",
     },
     'en': {
         'start': "🏠 Welcome!\n\nWelcome to the real estate listings bot!\nHere you can:\n• Post listings\n• Search conveniently\n• Use premium services",
@@ -1125,7 +1134,7 @@ TRANSLATIONS = {
         'listing_approved': "✅ Your listing has been approved!\n\n🎉 Your listing is now posted to the channel and visible to other users.",
         'listing_declined': "❌ Your listing has been declined\n\n📝 Reason: {feedback}\n\nPlease fix the issues and resubmit.",
 
-        'my_postings': "📝 My Postings",
+        'my_postings': "👀 My Postings",
         'no_my_postings': "😔 You don't have any postings yet\n\n📝 Press the appropriate button to post a listing",
         'posting_status_active': "🟢 Active",
         'posting_status_inactive': "🔴 Inactive",
@@ -1144,6 +1153,10 @@ TRANSLATIONS = {
         'yes_delete': "✅ Yes, delete",
         'cancel_action': "❌ Cancel",
         'posting_stats': "📊 Stats: {favorites} favorites",
+
+        'posting_deleted_success': "✅ Posting successfully deleted!",
+        'posting_delete_error': "❌ An error occurred while deleting the posting. Please try again.",
+        'favorite_listing_deleted': "💔 1 posting removed from favorites",
     }
 }
 

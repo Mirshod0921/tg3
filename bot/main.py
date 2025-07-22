@@ -362,21 +362,65 @@ async def update_listing_status(listing_id: int, is_active: bool):
             is_active, listing_id
         )
 
-async def delete_listing(listing_id: int):
-    """Delete listing and return users who had it favorited"""
+async def delete_listing(listing_id: int) -> dict:
+    """Delete listing and return affected users"""
     async with db_pool.acquire() as conn:
-        favorite_users = await conn.fetch('''
-            SELECT tu.telegram_id 
-            FROM real_estate_favorite f
-            JOIN real_estate_telegramuser tu ON f.user_id = tu.id
-            WHERE f.property_id = $1
-        ''', listing_id)
+        # Get users who favorited this listing
+        favorite_users = await conn.fetch(
+            'SELECT tu.telegram_id FROM real_estate_favorite f '
+            'JOIN real_estate_telegramuser tu ON f.user_id = tu.id '
+            'WHERE f.property_id = $1', listing_id
+        )
         
-        await conn.execute('DELETE FROM real_estate_favorite WHERE property_id = $1', listing_id)
-        await conn.execute('DELETE FROM real_estate_property WHERE id = $1', listing_id)
+        # Delete from favorites
+        await conn.execute(
+            'DELETE FROM real_estate_favorite WHERE property_id = $1', 
+            listing_id
+        )
         
-        return [user['telegram_id'] for user in favorite_users]
-
+        # Delete the listing
+        await conn.execute(
+            'DELETE FROM real_estate_property WHERE id = $1', 
+            listing_id
+        )
+        
+        return {
+            'user_ids': [user['telegram_id'] for user in favorite_users]
+        }
+    
+async def delete_listing_completely(listing_id: int) -> dict:
+    """Completely delete listing and return affected user IDs and photo file IDs"""
+    async with db_pool.acquire() as conn:
+        # Get users who favorited this listing
+        favorite_users = await conn.fetch(
+            'SELECT tu.telegram_id FROM real_estate_favorite f '
+            'JOIN real_estate_telegramuser tu ON f.user_id = tu.id '
+            'WHERE f.property_id = $1', 
+            listing_id
+        )
+        
+        # Get photo file IDs before deleting
+        photo_file_ids = await conn.fetchval(
+            'SELECT photo_file_ids FROM real_estate_property WHERE id = $1',
+            listing_id
+        )
+        
+        # Delete from favorites first
+        await conn.execute(
+            'DELETE FROM real_estate_favorite WHERE property_id = $1', 
+            listing_id
+        )
+        
+        # Then delete the listing itself
+        await conn.execute(
+            'DELETE FROM real_estate_property WHERE id = $1', 
+            listing_id
+        )
+        
+        return {
+            'user_ids': [user['telegram_id'] for user in favorite_users],
+            'photo_file_ids': json.loads(photo_file_ids) if photo_file_ids else []
+        }
 # Admin functions
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
@@ -888,13 +932,15 @@ def format_listing_raw_display(listing, user_lang):
 def get_main_menu_keyboard(user_lang: str) -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.add(KeyboardButton(text=get_text(user_lang, 'post_listing')))
-    builder.add(KeyboardButton(text=get_text(user_lang, 'view_listings')))
+    # The "View Listings" button has been removed as per your request.
+    # builder.add(KeyboardButton(text=get_text(user_lang, 'view_listings')))
     builder.add(KeyboardButton(text=get_text(user_lang, 'my_postings')))
     builder.add(KeyboardButton(text=get_text(user_lang, 'search')))
     builder.add(KeyboardButton(text=get_text(user_lang, 'favorites')))
     builder.add(KeyboardButton(text=get_text(user_lang, 'info')))
     builder.add(KeyboardButton(text=get_text(user_lang, 'language')))
-    builder.adjust(2, 2, 2, 1)
+    # Adjusting the layout for 6 buttons for a cleaner look
+    builder.adjust(2, 2, 2)
     return builder.as_markup(resize_keyboard=True)
 
 def get_search_type_keyboard(user_lang: str) -> InlineKeyboardMarkup:
@@ -1330,6 +1376,7 @@ async def process_search_all_region(callback_query, state: FSMContext):
     )
     await callback_query.answer()
 
+
 # SEARCH BY SPECIFIC DISTRICT (asks for property type filter)
 @dp.callback_query(F.data.startswith('search_district_'))
 async def process_search_district_selection(callback_query, state: FSMContext):
@@ -1388,10 +1435,6 @@ async def process_search_property_type_selection(callback_query, state: FSMConte
     user_lang = await get_user_language(callback_query.from_user.id)
     property_type = callback_query.data[16:]  # Remove 'search_property_' prefix
     
-    # Skip if it's "all" (handled by different handler)
-    if property_type == 'all':
-        return
-    
     data = await state.get_data()
     region_key = data.get('search_region')
     district_key = data.get('search_district')
@@ -1402,7 +1445,7 @@ async def process_search_property_type_selection(callback_query, state: FSMConte
     listings = await search_listings_by_location(
         region_key=region_key, 
         district_key=district_key, 
-        property_type=property_type
+        property_type=property_type if property_type != 'all' else None
     )
     
     # Get location and property type names for display
@@ -1414,7 +1457,7 @@ async def process_search_property_type_selection(callback_query, state: FSMConte
         else:
             location_name = region_name
         
-        property_type_name = get_text(user_lang, property_type)
+        property_type_name = get_text(user_lang, property_type) if property_type != 'all' else get_text(user_lang, 'all_property_types')
         search_description = f"{location_name} - {property_type_name}"
     except KeyError:
         search_description = f"Selected location - {property_type}"
@@ -1764,48 +1807,45 @@ async def finish_listing_with_makler(callback_query, state: FSMContext):
 # OTHER HANDLERS
 # =============================================
 
-@dp.message(F.text.in_(['👀 E\'lonlar', '👀 Объявления', '👀 Listings']))
-async def view_listings_handler(message: Message):
-    user_lang = await get_user_language(message.from_user.id)
-    listings = await get_listings(limit=5)
-    
-    if not listings:
-        await message.answer(get_text(user_lang, 'no_listings'))
-        return
-    
-    for listing in listings:
-        # Use raw display instead of template
-        listing_text = format_listing_raw_display(listing, user_lang)
-        keyboard = get_listing_keyboard(listing['id'], user_lang)
-        
-        photo_file_ids = json.loads(listing['photo_file_ids']) if listing['photo_file_ids'] else []
-        
-        if photo_file_ids:
-            try:
-                if len(photo_file_ids) == 1:
-                    await message.answer_photo(
-                        photo=photo_file_ids[0],
-                        caption=listing_text,
-                        reply_markup=keyboard
-                    )
-                else:
-                    # For multiple photos, show user content as caption on first photo
-                    media_group = MediaGroupBuilder(caption=listing_text)
-                    for i, photo_id in enumerate(photo_file_ids[:10]):
-                        if i == 0:
-                            media_group.add_photo(media=photo_id)
-                        else:
-                            media_group.add_photo(media=photo_id)
-                    
-                    await message.answer_media_group(media=media_group.build())
-                    # Send keyboard separately for media groups
-                    await message.answer("👆 E'lon", reply_markup=keyboard)
-                    
-            except Exception as e:
-                # Fallback to text if photo fails
-                await message.answer(listing_text, reply_markup=keyboard)
-        else:
-            await message.answer(listing_text, reply_markup=keyboard)
+# The 'view_listings_handler' has been removed as per your request.
+# @dp.message(F.text.in_(['👀 E\'lonlar', '👀 Объявления', '👀 Listings']))
+# async def view_listings_handler(message: Message):
+#     user_lang = await get_user_language(message.from_user.id)
+#     listings = await get_listings(limit=5)
+#     
+#     if not listings:
+#         await message.answer(get_text(user_lang, 'no_listings'))
+#         return
+#     
+#     for listing in listings:
+#         listing_text = format_listing_raw_display(listing, user_lang)
+#         keyboard = get_listing_keyboard(listing['id'], user_lang)
+#         
+#         photo_file_ids = json.loads(listing['photo_file_ids']) if listing['photo_file_ids'] else []
+#         
+#         if photo_file_ids:
+#             try:
+#                 if len(photo_file_ids) == 1:
+#                     await message.answer_photo(
+#                         photo=photo_file_ids[0],
+#                         caption=listing_text,
+#                         reply_markup=keyboard
+#                     )
+#                 else:
+#                     media_group = MediaGroupBuilder(caption=listing_text)
+#                     for i, photo_id in enumerate(photo_file_ids[:10]):
+#                         if i == 0:
+#                             media_group.add_photo(media=photo_id)
+#                         else:
+#                             media_group.add_photo(media=photo_id)
+#                     
+#                     await message.answer_media_group(media=media_group.build())
+#                     await message.answer("👆 E'lon", reply_markup=keyboard)
+#                     
+#             except Exception as e:
+#                 await message.answer(listing_text, reply_markup=keyboard)
+#         else:
+#             await message.answer(listing_text, reply_markup=keyboard)
 
 @dp.callback_query(F.data.startswith('fav_add_'))
 async def add_favorite_callback(callback_query):
@@ -1873,7 +1913,7 @@ async def info_handler(message: Message):
     await message.answer(get_text(user_lang, 'about'))
 
 # Handlers for My Postings
-@dp.message(F.text.in_(['📝 Mening e\'lonlarim', '📝 Мои объявления', '📝 My Postings']))
+@dp.message(F.text.in_(['👀 Mening e\'lonlarim', '👀 Мои объявления', '👀 My Postings']))
 async def my_postings_handler(message: Message):
     user_lang = await get_user_language(message.from_user.id)
     postings = await get_user_postings(message.from_user.id)
@@ -1971,17 +2011,16 @@ async def deactivate_posting(callback_query):
     await callback_query.answer(get_text(user_lang, 'posting_deactivated'))
 
 @dp.callback_query(F.data.startswith('delete_post_'))
-async def confirm_delete_posting(callback_query):
+async def confirm_delete_posting(callback_query: CallbackQuery):
     listing_id = int(callback_query.data.split('_')[2])
     user_lang = await get_user_language(callback_query.from_user.id)
     
     # Check ownership or admin rights
     listing = await get_listing_by_id(listing_id)
     if not listing:
-        await callback_query.answer("⛔ E'lon topilmadi!")
+        await callback_query.answer("⛔ E'lon topilmadi!", show_alert=True)
         return
     
-    # Get user database ID for ownership check
     async with db_pool.acquire() as conn:
         user_db_id = await conn.fetchval(
             'SELECT id FROM real_estate_telegramuser WHERE telegram_id = $1',
@@ -1989,10 +2028,10 @@ async def confirm_delete_posting(callback_query):
         )
     
     if listing['user_id'] != user_db_id and not is_admin(callback_query.from_user.id):
-        await callback_query.answer("⛔ Ruxsat yo'q!")
+        await callback_query.answer("⛔ Ruxsat yo'q!", show_alert=True)
         return
     
-    # Show confirmation dialog
+    # Build confirmation keyboard
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
         text=get_text(user_lang, 'yes_delete'), 
@@ -2004,64 +2043,169 @@ async def confirm_delete_posting(callback_query):
     ))
     builder.adjust(2)
     
-    await callback_query.message.edit_text(
-        get_text(user_lang, 'confirm_delete'),
-        reply_markup=builder.as_markup()
-    )
-    await callback_query.answer()
+    confirmation_text = get_text(user_lang, 'confirm_delete')
+    
+    # Try to edit the message (caption if photo, text if not)
+    try:
+        if callback_query.message.photo:
+            await callback_query.message.edit_caption(
+                caption=confirmation_text,
+                reply_markup=builder.as_markup()
+            )
+        else:
+            await callback_query.message.edit_text(
+                confirmation_text,
+                reply_markup=builder.as_markup()
+            )
+        await callback_query.answer()
+    except Exception as e:
+        logger.error(f"Could not edit message for delete confirmation, falling back. Error: {e}")
+        # Fallback: delete the original message and send a new one with the confirmation
+        try:
+            await callback_query.message.delete()
+        except Exception as del_e:
+            logger.warning(f"Could not delete message during fallback: {del_e}")
+            
+        await callback_query.message.answer(
+            confirmation_text,
+            reply_markup=builder.as_markup()
+        )
+        await callback_query.answer()
+
 
 @dp.callback_query(F.data.startswith('confirm_delete_'))
-async def delete_posting_confirmed(callback_query):
+async def delete_posting_confirmed(callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    listing_id = int(callback_query.data.split('_')[2])
+    user_lang = await get_user_language(user_id)
+    
+    try:
+        # 1. Verify listing exists and get basic info
+        listing = await get_listing_by_id(listing_id)
+        if not listing:
+            await callback_query.answer("⛔ Listing not found!", show_alert=True)
+            return
+
+        # 2. Check ownership or admin rights
+        async with db_pool.acquire() as conn:
+            user_db_id = await conn.fetchval(
+                'SELECT id FROM real_estate_telegramuser WHERE telegram_id = $1',
+                user_id
+            )
+        
+        if listing['user_id'] != user_db_id and not is_admin(user_id):
+            await callback_query.answer("⛔ No permission!", show_alert=True)
+            return
+
+        # 3. Delete from database and get affected users
+        deletion_result = await delete_listing_completely(listing_id)
+        
+        # 4. Notify users who had this favorited
+        for fav_user_id in deletion_result['user_ids']:
+            try:
+                msg = get_text(user_lang, 'favorite_listing_deleted', 
+                             title=listing.get('title', '#'+str(listing_id)))
+                await bot.send_message(chat_id=fav_user_id, text=msg)
+            except Exception as e:
+                logger.warning(f"Couldn't notify user {fav_user_id}: {e}")
+
+        # 5. Handle the response - NEW APPROACH
+        try:
+            # First try to send a new message
+            await callback_query.message.answer(
+                get_text(user_lang, 'posting_deleted_success')
+            )
+            
+            # Then try to delete the original message (works for all message types)
+            try:
+                await callback_query.message.delete()
+            except Exception as delete_error:
+                logger.warning(f"Couldn't delete original message: {delete_error}")
+                
+                # If deletion fails, try to edit it (only works for text messages)
+                try:
+                    await callback_query.message.edit_text(
+                        get_text(user_lang, 'posting_deleted_success')
+                    )
+                except Exception as edit_error:
+                    logger.warning(f"Couldn't edit original message: {edit_error}")
+
+        except Exception as e:
+            logger.error(f"Failed to handle response: {e}")
+            await callback_query.answer(
+                get_text(user_lang, 'posting_deleted_success'), 
+                show_alert=True
+            )
+
+        # 6. Final confirmation
+        await callback_query.answer()
+
+    except Exception as e:
+        logger.error(f"Critical error deleting listing {listing_id}: {e}")
+        try:
+            await callback_query.message.answer(
+                get_text(user_lang, 'posting_delete_error')
+            )
+        except:
+            pass
+        await callback_query.answer(
+            get_text(user_lang, 'posting_delete_error'), 
+            show_alert=True
+        )
+@dp.callback_query(F.data.startswith('cancel_delete_'))
+async def cancel_delete_posting(callback_query: CallbackQuery):
     listing_id = int(callback_query.data.split('_')[2])
     user_lang = await get_user_language(callback_query.from_user.id)
     
-    # Check ownership or admin rights
+    # Get the listing data to restore the original view
     listing = await get_listing_by_id(listing_id)
     if not listing:
-        await callback_query.answer("⛔ E'lon topilmadi!")
-        return
-    
-    # Get user database ID for ownership check
-    async with db_pool.acquire() as conn:
-        user_db_id = await conn.fetchval(
-            'SELECT id FROM real_estate_telegramuser WHERE telegram_id = $1',
-            callback_query.from_user.id
-        )
-    
-    if listing['user_id'] != user_db_id and not is_admin(callback_query.from_user.id):
-        await callback_query.answer("⛔ Ruxsat yo'q!")
-        return
-    
-    # Delete the posting and get users who favorited it
-    favorite_users = await delete_listing(listing_id)
-    
-    # Notify users who favorited it
-    for user_id in favorite_users:
+        await callback_query.answer("E'lon topilmadi.", show_alert=True)
         try:
-            message = get_text(user_lang, 'favorites_removed_notification', title=listing['title'] or listing['description'][:50])
-            await bot.send_message(chat_id=user_id, text=message)
-        except Exception as e:
-            logger.error(f"Failed to notify user {user_id}: {e}")
+            await callback_query.message.edit_text("Bu e'lon topilmadi yoki o'chirilgan.")
+        except Exception:
+            pass
+        return
     
-    await callback_query.message.edit_text(get_text(user_lang, 'posting_deleted'))
-    await callback_query.answer()
+    # Format the original posting text and keyboard
+    posting_text = format_my_posting_display(listing, user_lang)
+    keyboard = get_posting_management_keyboard(
+        listing_id, listing['is_approved'], user_lang, is_admin(callback_query.from_user.id)
+    )
+    
+    try:
+        # Check if the message to be edited has a photo
+        if callback_query.message.photo:
+            await callback_query.message.edit_caption(
+                caption=posting_text,
+                reply_markup=keyboard
+            )
+        else:
+            await callback_query.message.edit_text(
+                posting_text, 
+                reply_markup=keyboard
+            )
+        await callback_query.answer(get_text(user_lang, 'action_cancelled'))
+    except Exception as e:
+        logger.error(f"Could not restore view on cancel delete: {e}. Falling back.")
+        # Fallback: Delete the confirmation and resend the original posting
+        try:
+            await callback_query.message.delete()
+        except Exception as del_e:
+            logger.warning(f"Could not delete message on cancel fallback: {del_e}")
 
-@dp.callback_query(F.data.startswith('cancel_delete_'))
-async def cancel_delete_posting(callback_query):
-    listing_id = int(callback_query.data.split('_')[2])
-    user_lang = await get_user_language(callback_query.from_user.id)
-    
-    # Get posting and show management interface again
-    listing = await get_listing_by_id(listing_id)
-    if listing:
-        posting_text = format_my_posting_display(listing, user_lang)
-        keyboard = get_posting_management_keyboard(
-            listing_id, listing['is_approved'], user_lang, is_admin(callback_query.from_user.id)
-        )
-        
-        await callback_query.message.edit_text(posting_text, reply_markup=keyboard)
-    
-    await callback_query.answer()
+        # Re-send the posting as it appears in "My Postings"
+        photo_file_ids = json.loads(listing['photo_file_ids']) if listing['photo_file_ids'] else []
+        if photo_file_ids:
+            await callback_query.message.answer_photo(
+                photo=photo_file_ids[0],
+                caption=posting_text,
+                reply_markup=keyboard
+            )
+        else:
+            await callback_query.message.answer(posting_text, reply_markup=keyboard)
+        await callback_query.answer(get_text(user_lang, 'action_cancelled'))
+
 
 # ADMIN HANDLERS
 @dp.callback_query(F.data.startswith('decline_'))
