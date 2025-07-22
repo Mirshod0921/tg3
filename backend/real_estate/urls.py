@@ -1,3 +1,4 @@
+# backend/real_estate/urls.py - Fixed to avoid namespace conflicts
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
@@ -8,7 +9,7 @@ router.register(r'properties', views.PropertyViewSet, basename='property')
 router.register(r'regions', views.RegionViewSet, basename='region')
 router.register(r'districts', views.DistrictViewSet, basename='district')
 
-app_name = 'real_estate'
+app_name = 'api'  # Changed from 'real_estate' to 'api' to avoid conflicts
 
 urlpatterns = [
     # Include router URLs

@@ -1,13 +1,9 @@
-"""
-URL configuration for real_estate_project project.
-"""
+# backend/real_estate_project/urls.py - Fixed namespace issue
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
-from django.views.generic import TemplateView
-from rest_framework.documentation import include_docs_urls
 
 def api_root(request):
     """API root endpoint with available endpoints"""
@@ -17,7 +13,6 @@ def api_root(request):
         'endpoints': {
             'admin': '/admin/',
             'api': '/api/',
-            'docs': '/docs/',
             'health': '/api/health/',
             'users': '/api/users/',
             'properties': '/api/properties/',
@@ -27,7 +22,6 @@ def api_root(request):
             'statistics': '/api/statistics/',
             'payments': '/payments/',
         },
-        'swagger': '/docs/',
         'admin_panel': '/admin/',
     })
 
@@ -38,18 +32,12 @@ urlpatterns = [
     # API root
     path('', api_root, name='api-root'),
     
-    # API endpoints
-    path('api/', include('real_estate.urls', namespace='real_estate')),
+    # API endpoints with unique namespace
+    path('api/', include('real_estate.urls', namespace='api')),
     path('payments/', include('payments.urls', namespace='payments')),
     
-    # API Documentation
-#    path('docs/', include_docs_urls(
-#        title='Real Estate Bot API',
-#        description='API documentation for Real Estate Telegram Bot'
-#    )),
-    
     # Health check at root level
-    path('health/', include('real_estate.urls')),
+    path('health/', include(('real_estate.urls', 'real_estate'), namespace='health')),
 ]
 
 # Serve media files during development

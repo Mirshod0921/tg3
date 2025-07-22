@@ -1,3 +1,4 @@
+# backend/real_estate/models.py - Updated based on actual user flow
 from django.db import models
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -39,121 +40,115 @@ class TelegramUser(models.Model):
         return timezone.now() < self.premium_expires_at
     
     class Meta:
-        verbose_name = "Telegram User"
-        verbose_name_plural = "Telegram Users"
+        verbose_name = "Telegram Foydalanuvchi"
+        verbose_name_plural = "Telegram Foydalanuvchilar"
         ordering = ['-created_at']
 
 class Region(models.Model):
-    name_uz = models.CharField(max_length=100, verbose_name="Name (Uzbek)")
-    name_ru = models.CharField(max_length=100, verbose_name="Name (Russian)")
-    name_en = models.CharField(max_length=100, verbose_name="Name (English)")
+    # Only Uzbek name needed for admin
+    name_uz = models.CharField(max_length=100, verbose_name="Nomi")
     key = models.CharField(max_length=50, unique=True, db_index=True)
-    is_active = models.BooleanField(default=True)
-    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True, verbose_name="Faol")
+    order = models.PositiveIntegerField(default=0, verbose_name="Tartib")
     
     def __str__(self):
         return self.name_uz
     
-    def get_name(self, language='uz'):
-        return getattr(self, f'name_{language}', self.name_uz)
-    
     class Meta:
-        verbose_name = "Region"
-        verbose_name_plural = "Regions"
+        verbose_name = "Viloyat"
+        verbose_name_plural = "Viloyatlar"
         ordering = ['order', 'name_uz']
 
 class District(models.Model):
-    region = models.ForeignKey(Region, on_delete=models.CASCADE, related_name='districts')
-    name_uz = models.CharField(max_length=100, verbose_name="Name (Uzbek)")
-    name_ru = models.CharField(max_length=100, verbose_name="Name (Russian)")
-    name_en = models.CharField(max_length=100, verbose_name="Name (English)")
+    region = models.ForeignKey(Region, on_delete=models.CASCADE, related_name='districts', verbose_name="Viloyat")
+    # Only Uzbek name needed for admin
+    name_uz = models.CharField(max_length=100, verbose_name="Nomi")
     key = models.CharField(max_length=50, db_index=True)
-    is_active = models.BooleanField(default=True)
-    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True, verbose_name="Faol")
+    order = models.PositiveIntegerField(default=0, verbose_name="Tartib")
     
     def __str__(self):
         return f"{self.region.name_uz} - {self.name_uz}"
     
-    def get_name(self, language='uz'):
-        return getattr(self, f'name_{language}', self.name_uz)
-    
     class Meta:
-        verbose_name = "District"
-        verbose_name_plural = "Districts"
+        verbose_name = "Tuman"
+        verbose_name_plural = "Tumanlar"
         unique_together = ['region', 'key']
         ordering = ['region__order', 'order', 'name_uz']
 
 class Property(models.Model):
+    # Based on actual user input flow from main.py
     PROPERTY_TYPES = [
-        ('apartment', 'Квартира'),
-        ('house', 'Дом'),
-        ('commercial', 'Коммерческая'),
-        ('land', 'Земля'),
-    ]
-    
-    CONDITION_CHOICES = [
-        ('new', 'Новое'),
-        ('good', 'Хорошее'),
-        ('repair_needed', 'Требует ремонта'),
+        ('apartment', 'Kvartira'),
+        ('house', 'Uy'),
+        ('commercial', 'Tijorat'),
+        ('land', 'Yer'),
     ]
     
     STATUS_CHOICES = [
-        ('sale', 'Продажа'),
-        ('rent', 'Аренда'),
+        ('sale', 'Sotiladi'),
+        ('rent', 'Ijara'),
     ]
     
     APPROVAL_STATUS_CHOICES = [
-        ('pending', 'На рассмотрении'),
-        ('approved', 'Одобрено'),
-        ('rejected', 'Отклонено'),
+        ('pending', 'Kutilmoqda'),
+        ('approved', 'Tasdiqlangan'),
+        ('rejected', 'Rad etilgan'),
     ]
     
-    # Basic information
-    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='properties')
-    title = models.CharField(max_length=200, blank=True)
-    description = models.TextField()
-    property_type = models.CharField(max_length=20, choices=PROPERTY_TYPES)
+    # User and basic info
+    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='properties', verbose_name="Foydalanuvchi")
+    title = models.CharField(max_length=200, blank=True, verbose_name="Sarlavha")
+    description = models.TextField(verbose_name="Tavsif")
     
-    # Location
-    region = models.CharField(max_length=50, blank=True, null=True, db_index=True)
-    district = models.CharField(max_length=50, blank=True, null=True, db_index=True)
-    address = models.CharField(max_length=300)
-    full_address = models.CharField(max_length=500, blank=True)
+    # User selects these in bot
+    property_type = models.CharField(max_length=20, choices=PROPERTY_TYPES, verbose_name="Mulk turi")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, verbose_name="Maqsad")
     
-    # Property details
-    price = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(0)])
-    area = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)], help_text="Area in m²")
-    rooms = models.PositiveIntegerField(validators=[MinValueValidator(0), MaxValueValidator(50)], default=0)
-    condition = models.CharField(max_length=20, choices=CONDITION_CHOICES, blank=True)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES)
-    contact_info = models.CharField(max_length=200)
+    # Location (user selects region and district)
+    region = models.CharField(max_length=50, blank=True, null=True, db_index=True, verbose_name="Viloyat")
+    district = models.CharField(max_length=50, blank=True, null=True, db_index=True, verbose_name="Tuman")
+    address = models.CharField(max_length=300, verbose_name="Manzil")
+    full_address = models.CharField(max_length=500, blank=True, verbose_name="To'liq manzil")
+    
+    # User enters these required fields
+    price = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(0)], verbose_name="Narx")
+    area = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)], 
+                              help_text="m² da maydon", verbose_name="Maydon")
+    contact_info = models.CharField(max_length=200, verbose_name="Aloqa ma'lumotlari")
+    
+    # Optional fields (removed rooms, condition as they're not consistently used)
+    rooms = models.PositiveIntegerField(validators=[MinValueValidator(0), MaxValueValidator(50)], default=0, verbose_name="Xonalar soni")
+    condition = models.CharField(max_length=20, blank=True, verbose_name="Holati")
     
     # Media
-    photo_file_ids = models.JSONField(default=list, blank=True, help_text="Telegram file IDs")
+    photo_file_ids = models.JSONField(default=list, blank=True, help_text="Telegram fayl IDlari", verbose_name="Rasm ID lari")
     
     # Status and visibility
-    is_premium = models.BooleanField(default=False)
-    is_approved = models.BooleanField(default=False, db_index=True)
-    is_active = models.BooleanField(default=True, db_index=True)
-    approval_status = models.CharField(max_length=20, choices=APPROVAL_STATUS_CHOICES, default='pending')
-    admin_notes = models.TextField(blank=True, help_text="Internal admin notes")
+    is_premium = models.BooleanField(default=False, verbose_name="Premium")
+    is_approved = models.BooleanField(default=False, db_index=True, verbose_name="Tasdiqlangan")
+    is_active = models.BooleanField(default=True, db_index=True, verbose_name="Faol")
+    approval_status = models.CharField(max_length=20, choices=APPROVAL_STATUS_CHOICES, default='pending', verbose_name="Tasdiqlash holati")
+    
+    # Makler status (stored in admin_notes as per main.py)
+    admin_notes = models.TextField(blank=True, help_text="Makler holati: 'makler' yoki 'maklersiz'", verbose_name="Admin eslatmalari")
     
     # Statistics
-    views_count = models.PositiveIntegerField(default=0)
-    favorites_count = models.PositiveIntegerField(default=0)
+    views_count = models.PositiveIntegerField(default=0, verbose_name="Ko'rishlar soni")
+    favorites_count = models.PositiveIntegerField(default=0, verbose_name="Sevimlilar soni")
     
     # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    expires_at = models.DateTimeField(null=True, blank=True)
-    published_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="Yaratilgan vaqt")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Yangilangan vaqt")
+    expires_at = models.DateTimeField(null=True, blank=True, verbose_name="Muddati tugaydi")
+    published_at = models.DateTimeField(null=True, blank=True, verbose_name="Nashr etilgan vaqt")
     
     # Channel posting
-    channel_message_id = models.BigIntegerField(null=True, blank=True)
-    posted_to_channel = models.BooleanField(default=False)
+    channel_message_id = models.BigIntegerField(null=True, blank=True, verbose_name="Kanal xabar ID")
+    posted_to_channel = models.BooleanField(default=False, verbose_name="Kanalga joylangan")
     
     def __str__(self):
-        return f"{self.get_title()} - {self.price:,.0f} сум"
+        return f"{self.get_title()} - {self.price:,.0f} so'm"
     
     def get_title(self):
         if self.title:
@@ -193,7 +188,7 @@ class Property(models.Model):
             if self.region and self.district:
                 region = Region.objects.get(key=self.region)
                 district = District.objects.get(region=region, key=self.district)
-                return f"{district.get_name(language)}, {region.get_name(language)}"
+                return f"{district.name_uz}, {region.name_uz}"
         except (Region.DoesNotExist, District.DoesNotExist):
             pass
         
@@ -207,25 +202,17 @@ class Property(models.Model):
     def get_absolute_url(self):
         return reverse('property-detail', kwargs={'pk': self.pk})
     
-    def get_property_type_display_ru(self):
-        type_mapping = {
-            'apartment': 'Квартира',
-            'house': 'Дом', 
-            'commercial': 'Коммерческая',
-            'land': 'Земля'
-        }
-        return type_mapping.get(self.property_type, self.property_type)
-    
-    def get_status_display_ru(self):
-        status_mapping = {
-            'sale': 'Продажа',
-            'rent': 'Аренда'
-        }
-        return status_mapping.get(self.status, self.status)
+    def get_makler_status_display(self):
+        """Display makler status"""
+        if self.admin_notes == 'makler':
+            return 'Makler'
+        elif self.admin_notes == 'maklersiz':
+            return 'Maklersiz'
+        return 'Noma\'lum'
     
     class Meta:
-        verbose_name = "Property"
-        verbose_name_plural = "Properties"
+        verbose_name = "E'lon"
+        verbose_name_plural = "E'lonlar"
         ordering = ['-is_premium', '-created_at']
         indexes = [
             models.Index(fields=['is_approved', 'is_active']),
@@ -233,50 +220,51 @@ class Property(models.Model):
             models.Index(fields=['region', 'district']),
             models.Index(fields=['-created_at']),
             models.Index(fields=['price']),
+            models.Index(fields=['admin_notes']),  # For makler filtering
         ]
 
 class Favorite(models.Model):
-    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='favorites')
-    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='favorited_by')
-    created_at = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='favorites', verbose_name="Foydalanuvchi")
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='favorited_by', verbose_name="E'lon")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Yaratilgan vaqt")
     
     def __str__(self):
         return f"{self.user} - {self.property.get_title()}"
     
     class Meta:
         unique_together = ['user', 'property']
-        verbose_name = "Favorite"
-        verbose_name_plural = "Favorites"
+        verbose_name = "Sevimli"
+        verbose_name_plural = "Sevimlilar"
         ordering = ['-created_at']
 
 class UserActivity(models.Model):
     ACTION_TYPES = [
-        ('start', 'Запуск бота'),
-        ('post_listing', 'Размещение объявления'),
-        ('view_listing', 'Просмотр объявления'),
-        ('search', 'Поиск'),
-        ('favorite_add', 'Добавление в избранное'),
-        ('favorite_remove', 'Удаление из избранного'),
-        ('contact', 'Обращение к продавцу'),
-        ('language_change', 'Смена языка'),
-        ('premium_purchase', 'Покупка премиум'),
+        ('start', 'Botni ishga tushirish'),
+        ('post_listing', 'E\'lon joylashtirish'),
+        ('view_listing', 'E\'lonni ko\'rish'),
+        ('search', 'Qidiruv'),
+        ('favorite_add', 'Sevimlilar qo\'shish'),
+        ('favorite_remove', 'Sevimlidan o\'chirish'),
+        ('contact', 'Sotuvchi bilan bog\'lanish'),
+        ('language_change', 'Til o\'zgarishi'),
+        ('premium_purchase', 'Premium xarid'),
     ]
     
-    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='activities')
-    action = models.CharField(max_length=20, choices=ACTION_TYPES)
-    details = models.JSONField(blank=True, null=True)
-    property = models.ForeignKey(Property, on_delete=models.SET_NULL, null=True, blank=True)
-    ip_address = models.GenericIPAddressField(null=True, blank=True)
-    user_agent = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='activities', verbose_name="Foydalanuvchi")
+    action = models.CharField(max_length=20, choices=ACTION_TYPES, verbose_name="Harakat")
+    details = models.JSONField(blank=True, null=True, verbose_name="Tafsilotlar")
+    property = models.ForeignKey(Property, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="E'lon")
+    ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name="IP manzil")
+    user_agent = models.TextField(blank=True, verbose_name="Brauzer ma'lumotlari")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="Yaratilgan vaqt")
     
     def __str__(self):
         return f"{self.user} - {self.get_action_display()} ({self.created_at})"
     
     class Meta:
         ordering = ['-created_at']
-        verbose_name = "User Activity"
-        verbose_name_plural = "User Activities"
+        verbose_name = "Foydalanuvchi faoliyati"
+        verbose_name_plural = "Foydalanuvchi faoliyatlari"
         indexes = [
             models.Index(fields=['user', '-created_at']),
             models.Index(fields=['action', '-created_at']),
@@ -284,43 +272,46 @@ class UserActivity(models.Model):
 
 class PropertyImage(models.Model):
     """Model to store property images with metadata"""
-    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='images')
-    telegram_file_id = models.CharField(max_length=200, unique=True)
-    file_size = models.PositiveIntegerField(null=True, blank=True)
-    width = models.PositiveIntegerField(null=True, blank=True)
-    height = models.PositiveIntegerField(null=True, blank=True)
-    order = models.PositiveIntegerField(default=0)
-    is_main = models.BooleanField(default=False)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='images', verbose_name="E'lon")
+    telegram_file_id = models.CharField(max_length=200, unique=True, verbose_name="Telegram fayl ID")
+    file_size = models.PositiveIntegerField(null=True, blank=True, verbose_name="Fayl hajmi")
+    width = models.PositiveIntegerField(null=True, blank=True, verbose_name="Eni")
+    height = models.PositiveIntegerField(null=True, blank=True, verbose_name="Bo'yi")
+    order = models.PositiveIntegerField(default=0, verbose_name="Tartib")
+    is_main = models.BooleanField(default=False, verbose_name="Asosiy rasm")
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="Yuklangan vaqt")
     
     def __str__(self):
-        return f"Image for {self.property.get_title()}"
+        return f"{self.property.get_title()} uchun rasm"
     
     class Meta:
         ordering = ['order', 'uploaded_at']
-        verbose_name = "Property Image"
-        verbose_name_plural = "Property Images"
+        verbose_name = "E'lon rasmi"
+        verbose_name_plural = "E'lon rasmlari"
 
 class SearchQuery(models.Model):
     """Track search queries for analytics"""
-    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='searches', null=True, blank=True)
-    query = models.CharField(max_length=500)
-    search_type = models.CharField(max_length=50, choices=[
-        ('keyword', 'Keyword Search'),
-        ('location', 'Location Search'),
-        ('filters', 'Advanced Filters'),
-    ])
-    filters_used = models.JSONField(default=dict, blank=True)
-    results_count = models.PositiveIntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
+    SEARCH_TYPES = [
+        ('keyword', 'Kalit so\'z qidiruvi'),
+        ('location', 'Joylashuv qidiruvi'),
+        ('filters', 'Kengaytirilgan qidiruv'),
+    ]
+    
+    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE, related_name='searches', 
+                           null=True, blank=True, verbose_name="Foydalanuvchi")
+    query = models.CharField(max_length=500, verbose_name="Qidiruv so'zi")
+    search_type = models.CharField(max_length=50, choices=SEARCH_TYPES, verbose_name="Qidiruv turi")
+    filters_used = models.JSONField(default=dict, blank=True, verbose_name="Ishlatilgan filtrlar")
+    results_count = models.PositiveIntegerField(default=0, verbose_name="Natijalar soni")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Yaratilgan vaqt")
     
     def __str__(self):
-        return f"Search: {self.query} ({self.results_count} results)"
+        return f"Qidiruv: {self.query} ({self.results_count} ta natija)"
     
     class Meta:
         ordering = ['-created_at']
-        verbose_name = "Search Query"
-        verbose_name_plural = "Search Queries"
+        verbose_name = "Qidiruv so'rovi"
+        verbose_name_plural = "Qidiruv so'rovlari"
 
 # Signal handlers to maintain data consistency
 from django.db.models.signals import post_save, post_delete
