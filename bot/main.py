@@ -259,8 +259,8 @@ async def search_listings(query: str):
             LIMIT 10
         ''', f'%{query}%')
 
-async def search_listings_by_location(region_key=None, district_key=None, property_type=None):
-    """Search listings by region, district and/or property type"""
+async def search_listings_by_location(region_key=None, district_key=None, property_type=None, status=None):
+    """Search listings by region, district, property type and/or status"""
     async with db_pool.acquire() as conn:
         query = '''
             SELECT p.*, u.first_name, u.username 
@@ -281,10 +281,15 @@ async def search_listings_by_location(region_key=None, district_key=None, proper
             query += f' AND p.district = ${param_count}'
             params.append(district_key)
             
-        if property_type:
+        if property_type and property_type != 'all':
             param_count += 1
             query += f' AND p.property_type = ${param_count}'
             params.append(property_type)
+        
+        if status and status != 'all':
+            param_count += 1
+            query += f' AND p.status = ${param_count}'
+            params.append(status)
         
         query += ' ORDER BY p.is_premium DESC, p.created_at DESC LIMIT 10'
         
@@ -442,9 +447,10 @@ class ListingStates(StatesGroup):
 class SearchStates(StatesGroup):
     search_type = State()        
     keyword_query = State()      
+    status_filter = State()      #For rent/sale filter
     location_region = State()    
     location_district = State()
-    property_type_filter = State()  # FIXED: Added missing state
+    property_type_filter = State()
 
 class AdminStates(StatesGroup):
     reviewing_listing = State()
@@ -531,6 +537,8 @@ SEARCH_TRANSLATIONS = {
         'select_property_type_filter': "🏠 Uy-joy turini tanlang:",
         'all_property_types': "🏢 Barcha turlar",
         'search_with_filters': "🔍 Filtrlangan qidiruv",
+        'select_status_for_search': "🔍 Qidiruv turini tanlang:\n\n🏠 Sotuv yoki ijaraga berilganligi bo'yicha filtrlash",
+        'all_statuses': "🔘 Barchasi",
     },
     'ru': {
         'choose_search_type': "🔍 Выберите тип поиска:",
@@ -550,6 +558,8 @@ SEARCH_TRANSLATIONS = {
         'select_property_type_filter': "🏠 Выберите тип недвижимости:",
         'all_property_types': "🏢 Все типы",
         'search_with_filters': "🔍 Поиск с фильтрами",
+         'select_status_for_search': "🔍 Выберите тип поиска:\n\n🏠 Фильтр по продаже или аренде",
+        'all_statuses': "🔘 Все",
     },
     'en': {
         'choose_search_type': "🔍 Choose search type:",
@@ -569,6 +579,8 @@ SEARCH_TRANSLATIONS = {
         'select_property_type_filter': "🏠 Select property type:",
         'all_property_types': "🏢 All types",
         'search_with_filters': "🔍 Filtered search",
+        'select_status_for_search': "🔍 Choose search type:\n\n🏠 Filter by sale or rent",
+        'all_statuses': "🔘 All",
     }
 }
 
@@ -1094,6 +1106,29 @@ def get_search_districts_keyboard(region_key: str, user_lang: str) -> InlineKeyb
     builder.adjust(1, 2, 2, 2, 2, 2, 1)
     return builder.as_markup()
 
+
+
+def get_search_status_keyboard(user_lang: str) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(
+        text=get_text(user_lang, 'sale'), 
+        callback_data="search_status_sale"
+    ))
+    builder.add(InlineKeyboardButton(
+        text=get_text(user_lang, 'rent'), 
+        callback_data="search_status_rent"
+    ))
+    builder.add(InlineKeyboardButton(
+        text=get_text(user_lang, 'all_statuses'), 
+        callback_data="search_status_all"
+    ))
+    builder.add(InlineKeyboardButton(
+        text=get_text(user_lang, 'back'),
+        callback_data="search_back_to_type"
+    ))
+    builder.adjust(2, 1)
+    return builder.as_markup()
+
 def get_property_type_keyboard(user_lang: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(text=get_text(user_lang, 'apartment'), callback_data="type_apartment"))
@@ -1205,7 +1240,7 @@ async def post_to_channel_with_makler(listing):
     except Exception as e:
         logger.error(f"Error posting to channel: {e}")
 
-async def display_search_results(message_or_callback, listings, user_lang, search_term=""):
+async def display_search_results(message_or_callback, listings, user_lang, search_term="", state: FSMContext = None):
     """Display search results to user"""
     
     # Determine if this is a Message or CallbackQuery
@@ -1219,9 +1254,31 @@ async def display_search_results(message_or_callback, listings, user_lang, searc
             await message_or_callback.answer(text)
         return
     
-    # Show search results count
-    results_text = get_text(user_lang, 'search_results_count', count=len(listings))
-    if is_callback:
+    filters_text = ""
+    
+    # Get filters from state if available
+    if state:
+        data = await state.get_data()
+        status_filter = data.get('search_status', 'all')
+        property_filter = data.get('search_property_type', 'all')
+        
+        status_text = {
+            'sale': get_text(user_lang, 'sale'),
+            'rent': get_text(user_lang, 'rent'),
+            'all': get_text(user_lang, 'all_statuses')
+        }.get(status_filter, 'all')
+        
+        property_text = get_text(user_lang, property_filter) if property_filter != 'all' else get_text(user_lang, 'all_property_types')
+        
+        filters_text = (f"\n🔹 {get_text(user_lang, 'status')}: {status_text}"
+                       f"\n🔹 {get_text(user_lang, 'property_type')}: {property_text}")
+    
+    # Show search results with filters
+    results_text = (f"{get_text(user_lang, 'search_results_count', count=len(listings))}"
+                   f"{filters_text}"
+                   f"\n🔹 {get_text(user_lang, 'location')}: {search_term}")
+    
+    if hasattr(message_or_callback, 'message'):
         await message_or_callback.message.answer(results_text)
     else:
         await message_or_callback.answer(results_text)
@@ -1326,10 +1383,10 @@ async def search_keyword_selected(callback_query, state: FSMContext):
 @dp.callback_query(F.data == 'search_location')
 async def search_location_selected(callback_query, state: FSMContext):
     user_lang = await get_user_language(callback_query.from_user.id)
-    await state.set_state(SearchStates.location_region)
+    await state.set_state(SearchStates.status_filter)
     await callback_query.message.edit_text(
-        get_text(user_lang, 'select_region_for_search'),
-        reply_markup=get_search_regions_keyboard(user_lang)
+        get_text(user_lang, 'select_status_for_search'),
+        reply_markup=get_search_status_keyboard(user_lang)
     )
     await callback_query.answer()
 
@@ -1341,6 +1398,24 @@ async def process_keyword_search(message: Message, state: FSMContext):
     
     listings = await search_listings(query)
     await display_search_results(message, listings, user_lang, query)
+
+
+@dp.callback_query(F.data.startswith('search_status_'))
+async def process_search_status_selection(callback_query, state: FSMContext):
+    user_lang = await get_user_language(callback_query.from_user.id)
+    status = callback_query.data[13:]  # Remove 'search_status_' prefix
+    
+    if status == 'all':
+        await state.update_data(search_status=None)
+    else:
+        await state.update_data(search_status=status)
+    
+    await state.set_state(SearchStates.location_region)
+    await callback_query.message.edit_text(
+        get_text(user_lang, 'select_region_for_search'),
+        reply_markup=get_search_regions_keyboard(user_lang)
+    )
+    await callback_query.answer()
 
 # REGION SELECTION FOR SEARCH
 @dp.callback_query(F.data.startswith('search_region_'))
